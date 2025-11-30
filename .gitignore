@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyd
+*.so
+
+# Environments
+venv/
+env/
+.env/
+
+# Editor/OS Specific
+.vscode/
+.DS_Store
+
+# 🚨 CRITICAL SECURITY FILE 🚨
+.env
