@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 from crewai_tools import SerperDevTool
 from dotenv import load_dotenv
 
@@ -10,9 +10,6 @@ from dotenv import load_dotenv
 # ==========================
 
 load_dotenv()
-
-os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
-os.environ["SERPER_API_KEY"] = os.getenv("SERPER_API_KEY", "")
 
 # ==========================
 # Streamlit Page Config
@@ -28,13 +25,25 @@ st.set_page_config(
 # API Key Validation
 # ==========================
 
-if not os.getenv("GEMINI_API_KEY"):
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+
+if not GEMINI_API_KEY:
     st.error("Missing GEMINI_API_KEY")
     st.stop()
 
-if not os.getenv("SERPER_API_KEY"):
+if not SERPER_API_KEY:
     st.error("Missing SERPER_API_KEY")
     st.stop()
+
+# ==========================
+# Gemini LLM
+# ==========================
+
+llm = LLM(
+    model="gemini/gemini-2.5-flash",
+    api_key=GEMINI_API_KEY
+)
 
 # ==========================
 # UI
@@ -54,7 +63,7 @@ topic = st.text_input(
 )
 
 # ==========================
-# Run Crew
+# Generate Study Guide
 # ==========================
 
 if st.button("Generate Study Guide"):
@@ -65,78 +74,88 @@ if st.button("Generate Study Guide"):
 
     with st.spinner("Researching and generating content..."):
 
-        search_tool = SerperDevTool()
-
-        researcher_agent = Agent(
-            role="Senior Web Research Analyst",
-            goal=f"Gather the top 5 most recent and comprehensive articles on '{topic}'. Focus on credible sources.",
-            backstory=(
-                "You are an expert web researcher who collects accurate and reliable information."
-            ),
-            tools=[search_tool],
-            verbose=False,
-            allow_delegation=False,
-            llm="gemini-2.5-flash"
-        )
-
-        summarizer_agent = Agent(
-            role="Academic Content Synthesizer",
-            goal="Create a clear and concise study summary.",
-            backstory=(
-                "You are an experienced educator who converts complex topics into easy-to-understand summaries."
-            ),
-            verbose=False,
-            allow_delegation=False,
-            llm="gemini-2.5-flash"
-        )
-
-        tutor_agent = Agent(
-            role="Educational Tutor",
-            goal="Generate multiple-choice questions from the summary.",
-            backstory=(
-                "You create high-quality quizzes to evaluate understanding of study material."
-            ),
-            verbose=False,
-            allow_delegation=False,
-            llm="gemini-2.5-flash"
-        )
-
-        research_task = Task(
-            description=f"Research the topic '{topic}' using the search tool and gather useful information.",
-            expected_output="Comprehensive research notes.",
-            agent=researcher_agent
-        )
-
-        summarize_task = Task(
-            description="Create a detailed and well-structured study summary from the research notes.",
-            expected_output="A complete summary.",
-            agent=summarizer_agent,
-            context=[research_task]
-        )
-
-        quiz_task = Task(
-            description="Generate 5 MCQs based only on the summary.",
-            expected_output="5 MCQs with answers.",
-            agent=tutor_agent,
-            context=[summarize_task]
-        )
-
-        crew = Crew(
-            agents=[
-                researcher_agent,
-                summarizer_agent,
-                tutor_agent
-            ],
-            tasks=[
-                research_task,
-                summarize_task,
-                quiz_task
-            ],
-            process=Process.sequential,
-            verbose=False
-        )
-
         try:
+
+            search_tool = SerperDevTool()
+
+            researcher_agent = Agent(
+                role="Senior Web Research Analyst",
+                goal=f"Gather the top 5 most recent and comprehensive articles on '{topic}'. Focus on reliable sources.",
+                backstory=(
+                    "You are an expert researcher skilled at collecting accurate and trustworthy information from the web."
+                ),
+                tools=[search_tool],
+                verbose=False,
+                allow_delegation=False,
+                llm=llm
+            )
+
+            summarizer_agent = Agent(
+                role="Academic Content Synthesizer",
+                goal="Create a clear, concise, and educational summary.",
+                backstory=(
+                    "You are an experienced educator who converts complex research into easy-to-understand study material."
+                ),
+                verbose=False,
+                allow_delegation=False,
+                llm=llm
+            )
+
+            tutor_agent = Agent(
+                role="Educational Tutor",
+                goal="Generate multiple-choice questions from the study summary.",
+                backstory=(
+                    "You create high-quality quizzes that help students evaluate their understanding."
+                ),
+                verbose=False,
+                allow_delegation=False,
+                llm=llm
+            )
+
+            research_task = Task(
+                description=(
+                    f"Research the topic '{topic}' using the search tool. "
+                    "Collect useful facts, concepts, explanations, and recent developments."
+                ),
+                expected_output="Detailed research notes.",
+                agent=researcher_agent
+            )
+
+            summarize_task = Task(
+                description=(
+                    "Create a structured study summary from the research notes. "
+                    "Use headings, bullet points, and simple explanations."
+                ),
+                expected_output="Comprehensive study summary.",
+                agent=summarizer_agent,
+                context=[research_task]
+            )
+
+            quiz_task = Task(
+                description=(
+                    "Create 5 multiple-choice questions based only on the summary. "
+                    "Provide four options and clearly indicate the correct answer."
+                ),
+                expected_output="5 MCQs with answers.",
+                agent=tutor_agent,
+                context=[summarize_task]
+            )
+
+            crew = Crew(
+                agents=[
+                    researcher_agent,
+                    summarizer_agent,
+                    tutor_agent
+                ],
+                tasks=[
+                    research_task,
+                    summarize_task,
+                    quiz_task
+                ],
+                process=Process.sequential,
+                verbose=False
+            )
+
             result = crew.kickoff()
 
             st.success("Study Guide Generated Successfully!")
