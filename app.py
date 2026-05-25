@@ -3,14 +3,20 @@ import streamlit as st
 
 from crewai import Agent, Task, Crew, Process
 from crewai_tools import SerperDevTool
-from textwrap import dedent
 from dotenv import load_dotenv
+
+# ==========================
+# Load Environment Variables
+# ==========================
 
 load_dotenv()
 
-# Load API Keys
-os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY")
-os.environ["SERPER_API_KEY"] = os.getenv("SERPER_API_KEY")
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+os.environ["SERPER_API_KEY"] = os.getenv("SERPER_API_KEY", "")
+
+# ==========================
+# Streamlit Page Config
+# ==========================
 
 st.set_page_config(
     page_title="AI Study Assistant",
@@ -18,15 +24,38 @@ st.set_page_config(
     layout="wide"
 )
 
+# ==========================
+# API Key Validation
+# ==========================
+
+if not os.getenv("GEMINI_API_KEY"):
+    st.error("Missing GEMINI_API_KEY")
+    st.stop()
+
+if not os.getenv("SERPER_API_KEY"):
+    st.error("Missing SERPER_API_KEY")
+    st.stop()
+
+# ==========================
+# UI
+# ==========================
+
 st.title("📚 AI Study Assistant")
+
 st.write(
-    "Generate research summaries and quizzes using a multi-agent AI system."
+    """
+    Generate research summaries and quizzes using a multi-agent AI system.
+    """
 )
 
 topic = st.text_input(
     "Enter a study topic",
     placeholder="Machine Learning"
 )
+
+# ==========================
+# Run Crew
+# ==========================
 
 if st.button("Generate Study Guide"):
 
@@ -40,8 +69,10 @@ if st.button("Generate Study Guide"):
 
         researcher_agent = Agent(
             role="Senior Web Research Analyst",
-            goal=f"Gather the top 5 most recent and comprehensive articles on: '{topic}'",
-            backstory="Expert web researcher.",
+            goal=f"Gather the top 5 most recent and comprehensive articles on '{topic}'. Focus on credible sources.",
+            backstory=(
+                "You are an expert web researcher who collects accurate and reliable information."
+            ),
             tools=[search_tool],
             verbose=False,
             allow_delegation=False,
@@ -50,8 +81,10 @@ if st.button("Generate Study Guide"):
 
         summarizer_agent = Agent(
             role="Academic Content Synthesizer",
-            goal="Create a concise academic summary.",
-            backstory="Expert educator.",
+            goal="Create a clear and concise study summary.",
+            backstory=(
+                "You are an experienced educator who converts complex topics into easy-to-understand summaries."
+            ),
             verbose=False,
             allow_delegation=False,
             llm="gemini-2.5-flash"
@@ -59,29 +92,31 @@ if st.button("Generate Study Guide"):
 
         tutor_agent = Agent(
             role="Educational Tutor",
-            goal="Generate MCQs from the summary.",
-            backstory="Creates educational quizzes.",
+            goal="Generate multiple-choice questions from the summary.",
+            backstory=(
+                "You create high-quality quizzes to evaluate understanding of study material."
+            ),
             verbose=False,
             allow_delegation=False,
             llm="gemini-2.5-flash"
         )
 
         research_task = Task(
-            description=f"Research '{topic}' using the search tool.",
-            expected_output="Raw research notes.",
+            description=f"Research the topic '{topic}' using the search tool and gather useful information.",
+            expected_output="Comprehensive research notes.",
             agent=researcher_agent
         )
 
         summarize_task = Task(
-            description="Create a detailed summary.",
-            expected_output="Summary.",
+            description="Create a detailed and well-structured study summary from the research notes.",
+            expected_output="A complete summary.",
             agent=summarizer_agent,
             context=[research_task]
         )
 
         quiz_task = Task(
-            description="Create 5 MCQs from the summary.",
-            expected_output="Quiz with answers.",
+            description="Generate 5 MCQs based only on the summary.",
+            expected_output="5 MCQs with answers.",
             agent=tutor_agent,
             context=[summarize_task]
         )
@@ -101,9 +136,13 @@ if st.button("Generate Study Guide"):
             verbose=False
         )
 
-        result = crew.kickoff()
+        try:
+            result = crew.kickoff()
 
-    st.success("Done!")
+            st.success("Study Guide Generated Successfully!")
 
-    st.markdown("## Generated Output")
-    st.write(result)
+            st.markdown("## Generated Output")
+            st.write(result)
+
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
